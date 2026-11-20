@@ -1460,6 +1460,31 @@ const STATS_ROWS = [
   ['stats.dropped', (s) => formatCount(s.droppedFrames)]
 ]
 
+/* --------------------- plein écran multi-navigateurs ----------------------- */
+
+/** Élément actuellement en plein écran (API standard ou préfixée). */
+function getFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null
+}
+
+/**
+ * Appelle request/exitFullscreen avec repli sur la variante préfixée.
+ * Safari iOS ne fournit pas ces méthodes sur un <div> : la promesse est
+ * alors rejetée et l'appelant bascule sur le plein écran CSS.
+ */
+function callFullscreen(target, method, prefixedMethod) {
+  const fn = target[method] ?? target[prefixedMethod]
+  if (typeof fn !== 'function') return Promise.reject(new TypeError(`${method} unavailable`))
+
+  try {
+    const result = fn.call(target)
+    if (result && typeof result.catch === 'function') return result
+  } catch (error) {
+    return Promise.reject(error)
+  }
+  return Promise.resolve()
+}
+
 /**
  * Vignette de la vue Live : un seul flux en cours de lecture. Contrairement à
  * l'ancienne carte mixte, elle n'existe que tant que le flux tourne ; la
@@ -1474,6 +1499,7 @@ class Tile {
     this.stats = null
     this.hasVideo = false
     this.statsOpen = false
+    this.cssFullscreen = false
     this.aspectRatio = null
 
     const el = document.createElement('div')
@@ -1578,16 +1604,27 @@ class Tile {
     })
 
     this.fullscreenBtn.addEventListener('click', () => {
-      if (document.fullscreenElement === this.videoContainer) {
-        document.exitFullscreen().catch(() => undefined)
-      } else {
-        this.videoContainer.requestFullscreen().catch((error) => {
-          console.error('[MultiView] Fullscreen failed:', error)
-        })
+      if (getFullscreenElement() === this.videoContainer) {
+        callFullscreen(document, 'exitFullscreen', 'webkitExitFullscreen').catch(() => undefined)
+        return
       }
+
+      if (this.cssFullscreen) {
+        this.setCssFullscreen(false)
+        return
+      }
+
+      callFullscreen(this.videoContainer, 'requestFullscreen', 'webkitRequestFullscreen').catch(
+        () => {
+          // iPhone/iPad : pas de plein écran de <div> en Safari. On couvre
+          // tout l'écran en CSS, ce qui garde les contrôles de la tuile.
+          this.setCssFullscreen(true)
+        }
+      )
     })
 
     document.addEventListener('fullscreenchange', () => this.refreshFullscreenButton())
+    document.addEventListener('webkitfullscreenchange', () => this.refreshFullscreenButton())
 
     this.busyOverlay.querySelector('[data-act="retry"]').addEventListener('click', () => {
       this.player.retry()
@@ -1837,8 +1874,24 @@ class Tile {
     }
   }
 
+  /**
+   * Plein écran de repli pour les navigateurs sans API Fullscreen sur les
+   * éléments (Safari iOS) : le conteneur vidéo couvre tout le viewport.
+   */
+  setCssFullscreen(on) {
+    if (on) {
+      for (const tile of tiles.values()) {
+        if (tile !== this) tile.setCssFullscreen(false)
+      }
+    }
+
+    this.cssFullscreen = on
+    this.videoContainer.classList.toggle('css-fullscreen', on)
+    this.refreshFullscreenButton()
+  }
+
   refreshFullscreenButton() {
-    const isFullscreen = document.fullscreenElement === this.videoContainer
+    const isFullscreen = getFullscreenElement() === this.videoContainer || this.cssFullscreen
     this.fullscreenBtn.innerHTML = `${icon(isFullscreen ? 'exitFullscreen' : 'fullscreen', 14)}<span>${
       isFullscreen ? t('stream.exitFullscreen') : t('stream.fullscreen')
     }</span>`
@@ -2324,6 +2377,8 @@ function deleteStream(id) {
   delete state.audioMap[id]
   delete state.aspectRatios[id]
 
+  stopProbeLoop(id)
+
   writeJson(STORAGE_KEYS.streams, state.streams)
   writeJson(STORAGE_KEYS.tileSizes, state.tileSizes)
   writeJson(STORAGE_KEYS.audio, state.audioMap)
@@ -2347,7 +2402,17 @@ function closeTopDialog() {
 }
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && openDialogs.length > 0) closeTopDialog()
+  if (event.key !== 'Escape') return
+
+  if (openDialogs.length > 0) {
+    closeTopDialog()
+    return
+  }
+
+  // Le plein écran CSS (repli iOS) ne reçoit pas l'Échap native du fullscreen.
+  for (const tile of tiles.values()) {
+    if (tile.cssFullscreen) tile.setCssFullscreen(false)
+  }
 })
 
 for (const backdrop of [formBackdrop, settingsBackdrop, confirmBackdrop]) {
@@ -2440,6 +2505,9 @@ document.getElementById('stream-form').addEventListener('submit', (event) => {
   closeTopDialog()
   renderLibrary()
   renderLive()
+  // Un flux ajouté ou modifié en bibliothèque doit être sondé immédiatement,
+  // sans attendre un changement de vue ou un rechargement.
+  refreshProbeLoops()
 })
 
 /* ------------------------------ paramètres ------------------------------- */
