@@ -1,0 +1,7 @@
+# Système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Outillage local (le projet est 100 % statique)
+node_modules/
