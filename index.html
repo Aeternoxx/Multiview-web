@@ -88,9 +88,17 @@
             <p id="library-count"></p>
           </div>
 
-          <div id="selection-bar" class="selection-bar" hidden>
-            <span id="selection-count"></span>
-            <button id="launch-selected" class="primary-button" type="button"></button>
+          <div class="heading-actions">
+            <div id="library-actions" class="library-actions" hidden>
+              <button id="library-select-all" class="secondary-button" type="button"></button>
+              <button id="library-clear-selection" class="secondary-button" type="button"></button>
+              <button id="library-refresh" class="secondary-button" type="button"></button>
+            </div>
+
+            <div id="selection-bar" class="selection-bar" hidden>
+              <span id="selection-count"></span>
+              <button id="launch-selected" class="primary-button" type="button"></button>
+            </div>
           </div>
         </div>
 
@@ -132,6 +140,7 @@
 
           <div class="live-toolbar">
             <button id="live-fit" class="secondary-button" type="button"></button>
+            <button id="live-reset-layout" class="secondary-button" type="button" hidden></button>
             <button id="live-stop-all" class="secondary-button danger" type="button" hidden></button>
           </div>
         </div>
@@ -270,9 +279,7 @@
           <div class="modal-actions">
             <button id="data-export" class="secondary-button" type="button" data-i18n="settings.data.export"></button>
             <button id="data-import" class="secondary-button" type="button" data-i18n="settings.data.import"></button>
-            <button id="data-reset" class="secondary-button danger" type="button" data-i18n="settings.data.reset"></button>
           </div>
-          <p class="modal-hint" data-i18n="settings.data.resetHint"></p>
           <p id="settings-notice" class="modal-notice" hidden></p>
         </section>
       </div>

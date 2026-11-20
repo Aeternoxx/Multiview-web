@@ -361,6 +361,20 @@ a:focus-visible {
 
 /* ---------- Bibliothèque ---------- */
 
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .selection-bar {
   display: flex;
   align-items: center;
@@ -498,6 +512,8 @@ a:focus-visible {
   background: rgb(10 12 18 / 72%);
   font-size: 12px;
   pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 .live-name-text {
@@ -505,13 +521,6 @@ a:focus-visible {
   color: #eef1f7;
   font-weight: 600;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.live-status {
-  flex-shrink: 0;
-  color: #9aa3b5;
-  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -957,6 +966,34 @@ a:focus-visible {
 
 .video-container:hover .audio-controls,
 .video-container:has(:focus-visible) .audio-controls {
+  opacity: 1;
+}
+
+/*
+ * Plein écran : le conteneur occupe tout l'écran, le curseur n'en sort
+ * jamais et le survol laisserait toutes les bulles affichées en permanence.
+ * Le nom et les boutons d'action ne réapparaissent que quand la souris
+ * traverse le haut de la zone (fs-top), les contrôles audio que quand elle
+ * traverse le bas (fs-bottom) — voir updateFsEdge dans app.js.
+ */
+.video-container:fullscreen .view-controls,
+.video-container:fullscreen .audio-controls,
+.video-container:fullscreen .live-name,
+.video-container.css-fullscreen .view-controls,
+.video-container.css-fullscreen .audio-controls,
+.video-container.css-fullscreen .live-name {
+  opacity: 0;
+}
+
+.video-container:fullscreen.fs-top .view-controls,
+.video-container:fullscreen.fs-top .live-name,
+.video-container.css-fullscreen.fs-top .view-controls,
+.video-container.css-fullscreen.fs-top .live-name {
+  opacity: 1;
+}
+
+.video-container:fullscreen.fs-bottom .audio-controls,
+.video-container.css-fullscreen.fs-bottom .audio-controls {
   opacity: 1;
 }
 

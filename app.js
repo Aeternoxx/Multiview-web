@@ -41,10 +41,18 @@ const FR = {
   'library.selectedCount': '{count} sélectionné(s)',
   'library.selectFor': 'Sélectionner {name}',
   'library.playing': 'En lecture',
+  'library.selectAll': 'Tout cocher',
+  'library.selectAllHint': 'Cocher tous les flux disponibles',
+  'library.clearSelection': 'Tout décocher',
+  'library.clearSelectionHint': 'Retirer tous les flux de la sélection',
+  'library.refresh': 'Actualiser',
+  'library.refreshHint': 'Réactualiser immédiatement l’état des flux',
   'live.title': 'Vue Live',
   'live.count': '{count} flux en lecture',
   'live.fit': 'Ajuster',
   'live.fitHint': 'Redimensionner les vignettes pour remplir la fenêtre selon le nombre de flux',
+  'live.reset': 'Réinitialiser',
+  'live.resetHint': 'Oublier les tailles de vignettes et revenir à la disposition par défaut',
   'live.stopAll': 'Tout arrêter',
   'live.empty.title': 'Aucun flux en lecture',
   'live.empty.body': 'Lancez un ou plusieurs flux depuis la Bibliothèque pour les afficher ici.',
@@ -112,14 +120,11 @@ const FR = {
   'settings.data.title': 'Données',
   'settings.data.export': 'Exporter les flux',
   'settings.data.import': 'Importer des flux',
-  'settings.data.reset': 'Réinitialiser la disposition',
-  'settings.data.resetHint': 'Les tailles de tuiles seront oubliées.',
   'settings.notice.exported': 'Flux exportés.',
   'settings.notice.exportFailed': 'Export impossible.',
   'settings.notice.imported': '{count} flux importé(s).',
   'settings.notice.importSkipped': '{count} entrée(s) ignorée(s).',
   'settings.notice.importFailed': 'Aucun flux importé.',
-  'settings.notice.reset': 'Disposition réinitialisée.',
   'footer.support': 'Ko-fi'
 }
 
@@ -146,10 +151,18 @@ const EN = {
   'library.selectedCount': '{count} selected',
   'library.selectFor': 'Select {name}',
   'library.playing': 'Playing',
+  'library.selectAll': 'Select all',
+  'library.selectAllHint': 'Check every available stream',
+  'library.clearSelection': 'Clear selection',
+  'library.clearSelectionHint': 'Remove every stream from the selection',
+  'library.refresh': 'Refresh',
+  'library.refreshHint': 'Re-check the stream states right away',
   'live.title': 'Live view',
   'live.count': '{count} stream(s) playing',
   'live.fit': 'Fit',
   'live.fitHint': 'Resize the tiles to fill the window according to the number of streams',
+  'live.reset': 'Reset',
+  'live.resetHint': 'Forget tile sizes and restore the default layout',
   'live.stopAll': 'Stop all',
   'live.empty.title': 'No stream playing',
   'live.empty.body': 'Start one or more streams from the Library to display them here.',
@@ -217,14 +230,11 @@ const EN = {
   'settings.data.title': 'Data',
   'settings.data.export': 'Export streams',
   'settings.data.import': 'Import streams',
-  'settings.data.reset': 'Reset layout',
-  'settings.data.resetHint': 'Tile sizes will be forgotten.',
   'settings.notice.exported': 'Streams exported.',
   'settings.notice.exportFailed': 'Export failed.',
   'settings.notice.imported': '{count} stream(s) imported.',
   'settings.notice.importSkipped': '{count} entr(y/ies) skipped.',
   'settings.notice.importFailed': 'No stream imported.',
-  'settings.notice.reset': 'Layout reset.',
   'footer.support': 'Ko-fi'
 }
 
@@ -263,6 +273,7 @@ const ICONS = {
     '<path d="M4 15v-2.5a8 8 0 0 1 16 0V15"/><path d="M4 15h3v5H5.5A1.5 1.5 0 0 1 4 18.5Z"/>' +
     '<path d="M20 15h-3v5h1.5A1.5 1.5 0 0 0 20 18.5Z"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  check: '<path d="M5 12.5 9.5 17 19 7"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
   fit:
     '<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/>' +
@@ -1162,7 +1173,12 @@ const liveCountEl = document.getElementById('live-count')
 const selectionBarEl = document.getElementById('selection-bar')
 const selectionCountEl = document.getElementById('selection-count')
 const launchSelectedBtn = document.getElementById('launch-selected')
+const libraryActionsEl = document.getElementById('library-actions')
+const librarySelectAllBtn = document.getElementById('library-select-all')
+const libraryClearSelectionBtn = document.getElementById('library-clear-selection')
+const libraryRefreshBtn = document.getElementById('library-refresh')
 const liveFitBtn = document.getElementById('live-fit')
+const liveResetLayoutBtn = document.getElementById('live-reset-layout')
 const liveStopAllBtn = document.getElementById('live-stop-all')
 const tabLibraryBtn = document.getElementById('tab-library')
 const tabLiveBtn = document.getElementById('tab-live')
@@ -1501,6 +1517,7 @@ class Tile {
     this.statsOpen = false
     this.cssFullscreen = false
     this.aspectRatio = null
+    this.fsHideTimer = null
 
     const el = document.createElement('div')
     el.className = 'sortable-stream'
@@ -1512,7 +1529,6 @@ class Tile {
           <div class="live-name">
             <span class="availability-dot checking" title=""></span>
             <span class="live-name-text"></span>
-            <span class="live-status"></span>
           </div>
           <div class="player-overlay busy-overlay" hidden>
             <span class="video-symbol"></span>
@@ -1547,7 +1563,6 @@ class Tile {
     this.video = el.querySelector('video')
     this.dot = el.querySelector('.live-name .availability-dot')
     this.nameTextEl = el.querySelector('.live-name-text')
-    this.liveStatusEl = el.querySelector('.live-status')
     this.stopBtn = el.querySelector('[data-act="stop"]')
     this.statsBtn = el.querySelector('[data-act="stats"]')
     this.busyOverlay = el.querySelector('.busy-overlay')
@@ -1568,6 +1583,7 @@ class Tile {
 
   destroy() {
     this.player.deactivate()
+    if (this.fsHideTimer) clearTimeout(this.fsHideTimer)
     this.el.remove()
   }
 
@@ -1623,8 +1639,19 @@ class Tile {
       )
     })
 
-    document.addEventListener('fullscreenchange', () => this.refreshFullscreenButton())
-    document.addEventListener('webkitfullscreenchange', () => this.refreshFullscreenButton())
+    // Fullscreen : le curseur ne quitte jamais le conteneur, le survol ne
+    // masquerait donc plus rien. Les bulles ne réapparaissent que lorsque la
+    // souris traverse le haut ou le bas de la zone (voir updateFsEdge).
+    this.videoContainer.addEventListener('pointermove', (event) => this.updateFsEdge(event))
+
+    document.addEventListener('fullscreenchange', () => {
+      this.refreshFullscreenButton()
+      this.clearFsEdge()
+    })
+    document.addEventListener('webkitfullscreenchange', () => {
+      this.refreshFullscreenButton()
+      this.clearFsEdge()
+    })
 
     this.busyOverlay.querySelector('[data-act="retry"]').addEventListener('click', () => {
       this.player.retry()
@@ -1801,8 +1828,6 @@ class Tile {
     this.dot.className = `availability-dot ${dotState}`
     this.dot.title = t(AVAILABILITY_KEYS[dotState])
 
-    this.liveStatusEl.textContent = t(STATUS_KEYS[this.status] ?? 'stream.status.stopped')
-
     const showBusy = !this.hasVideo || this.status !== 'live'
     this.busyOverlay.hidden = !showBusy
 
@@ -1887,7 +1912,61 @@ class Tile {
 
     this.cssFullscreen = on
     this.videoContainer.classList.toggle('css-fullscreen', on)
+    this.clearFsEdge()
     this.refreshFullscreenButton()
+  }
+
+  /* ------------------- survol des bords en plein écran -------------------- */
+
+  isFullscreenActive() {
+    return getFullscreenElement() === this.videoContainer || this.cssFullscreen
+  }
+
+  /**
+   * En plein écran le conteneur couvre tout l'écran : le survol CSS ne peut
+   * plus masquer les bulles d'elles-mêmes. Nom du flux et boutons d'action ne
+   * réapparaissent que lorsque la souris traverse le haut de la zone, les
+   * contrôles audio que lorsqu'elle traverse le bas, et tout se masque de
+   * nouveau dès que le curseur reste en repos au centre.
+   */
+  updateFsEdge(event) {
+    if (!this.isFullscreenActive()) {
+      this.videoContainer.classList.remove('fs-top', 'fs-bottom')
+      return
+    }
+
+    const interactive =
+      event.target &&
+      typeof event.target.closest === 'function' &&
+      event.target.closest('.view-controls, .audio-controls, .stats-panel')
+    if (interactive) {
+      this.scheduleFsHide()
+      return
+    }
+
+    const rect = this.videoContainer.getBoundingClientRect()
+    const band = Math.max(90, Math.round(rect.height * 0.18))
+    const y = event.clientY - rect.top
+
+    this.videoContainer.classList.toggle('fs-top', y <= band)
+    this.videoContainer.classList.toggle('fs-bottom', y >= rect.height - band)
+    this.scheduleFsHide()
+  }
+
+  scheduleFsHide() {
+    if (this.fsHideTimer) clearTimeout(this.fsHideTimer)
+    // Les statistiques ouvertes restent affichables : c'est l'utilisateur qui
+    // les a demandées, elles disparaissent avec leur panneau.
+    if (this.statsOpen) return
+    this.fsHideTimer = setTimeout(() => this.clearFsEdge(), 2500)
+  }
+
+  clearFsEdge() {
+    if (this.fsHideTimer) {
+      clearTimeout(this.fsHideTimer)
+      this.fsHideTimer = null
+    }
+    this.videoContainer.classList.remove('fs-top', 'fs-bottom')
   }
 
   refreshFullscreenButton() {
@@ -2062,7 +2141,7 @@ const HIDDEN_INTERVAL_MS = 15_000
 
 const probeLoops = new Map()
 
-function startProbeLoop(stream) {
+function startProbeLoop(stream, initialDelayMs = 600 + Math.random() * 1200) {
   stopProbeLoop(stream.id)
 
   const loop = { cancelled: false, timer: null, cleanup: null }
@@ -2097,7 +2176,7 @@ function startProbeLoop(stream) {
   loop.cleanup = () => document.removeEventListener('visibilitychange', onVisibilityChange)
 
   // Décalage aléatoire pour que la liste ne sonde pas tout d'un coup.
-  schedule(600 + Math.random() * 1200)
+  schedule(initialDelayMs)
 }
 
 function stopProbeLoop(id) {
@@ -2246,6 +2325,7 @@ function renderLibrary() {
   emptyEl.hidden = state.streams.length !== 0
   libraryListEl.hidden = state.streams.length === 0
   libraryCountEl.textContent = t('library.count', { count: state.streams.length })
+  libraryActionsEl.hidden = state.streams.length === 0
   refreshSelectionBar()
 }
 
@@ -2283,6 +2363,7 @@ function refreshLiveChrome() {
   gridEl.hidden = count === 0
   liveCountEl.textContent = t('live.count', { count })
   liveFitBtn.hidden = count === 0
+  liveResetLayoutBtn.hidden = count === 0
   liveStopAllBtn.hidden = count === 0
 }
 
@@ -2297,7 +2378,22 @@ function refreshLiveButtons() {
   liveFitBtn.innerHTML = `${icon('fit', 14)}<span>${t('live.fit')}</span>`
   liveFitBtn.title = t('live.fitHint')
   liveFitBtn.setAttribute('aria-label', t('live.fitHint'))
+  liveResetLayoutBtn.innerHTML = `${icon('refresh', 14)}<span>${t('live.reset')}</span>`
+  liveResetLayoutBtn.title = t('live.resetHint')
+  liveResetLayoutBtn.setAttribute('aria-label', t('live.resetHint'))
   liveStopAllBtn.innerHTML = `${icon('stop', 13)}<span>${t('live.stopAll')}</span>`
+}
+
+function refreshLibraryButtons() {
+  librarySelectAllBtn.innerHTML = `${icon('check', 14)}<span>${t('library.selectAll')}</span>`
+  librarySelectAllBtn.title = t('library.selectAllHint')
+  librarySelectAllBtn.setAttribute('aria-label', t('library.selectAllHint'))
+  libraryClearSelectionBtn.innerHTML = `${icon('close', 14)}<span>${t('library.clearSelection')}</span>`
+  libraryClearSelectionBtn.title = t('library.clearSelectionHint')
+  libraryClearSelectionBtn.setAttribute('aria-label', t('library.clearSelectionHint'))
+  libraryRefreshBtn.innerHTML = `${icon('refresh', 14)}<span>${t('library.refresh')}</span>`
+  libraryRefreshBtn.title = t('library.refreshHint')
+  libraryRefreshBtn.setAttribute('aria-label', t('library.refreshHint'))
 }
 
 /* ---------------------------- lancer / arrêter --------------------------- */
@@ -2350,8 +2446,41 @@ function stopAllRunning() {
 }
 
 liveFitBtn.addEventListener('click', () => autoFitLiveGrid())
+liveResetLayoutBtn.addEventListener('click', () => {
+  state.tileSizes = {}
+  writeJson(STORAGE_KEYS.tileSizes, state.tileSizes)
+  for (const tile of tiles.values()) tile.refreshSize()
+})
 liveStopAllBtn.addEventListener('click', () => stopAllRunning())
 launchSelectedBtn.addEventListener('click', () => startStreams([...state.selected]))
+
+/* --------- actions groupées de la bibliothèque (sélection / sondes) -------- */
+
+librarySelectAllBtn.addEventListener('click', () => {
+  // « Tous cocher » ne coche que les flux cochables : arrêtés et disponibles.
+  for (const stream of state.streams) {
+    if (state.running.has(stream.id)) continue
+    if (getAvailability(stream.url) !== 'online') continue
+    state.selected.add(stream.id)
+  }
+  renderLibrary()
+})
+
+libraryClearSelectionBtn.addEventListener('click', () => {
+  if (state.selected.size === 0) return
+  state.selected.clear()
+  renderLibrary()
+})
+
+libraryRefreshBtn.addEventListener('click', () => {
+  // Oublie chaque résultat en cache et relance la sonde sans attendre la
+  // cadence : l'état affiché redevient celui du terrain, immédiatement.
+  for (const stream of state.streams) {
+    if (state.running.has(stream.id)) continue
+    invalidateProbeCache(stream.url)
+    if (probeLoops.has(stream.id) || state.view === 'library') startProbeLoop(stream, 0)
+  }
+})
 
 function reorderStream(targetId) {
   if (!draggedId || draggedId === targetId) return
@@ -2627,13 +2756,6 @@ importInput.addEventListener('change', () => {
   reader.readAsText(file)
 })
 
-document.getElementById('data-reset').addEventListener('click', () => {
-  state.tileSizes = {}
-  writeJson(STORAGE_KEYS.tileSizes, state.tileSizes)
-  for (const tile of tiles.values()) tile.refreshSize()
-  setSettingsNotice(t('settings.notice.reset'))
-})
-
 /* ------------------------- confirmation suppression ---------------------- */
 
 const confirmMessageEl = document.getElementById('confirm-message')
@@ -2688,6 +2810,7 @@ function applyLanguage() {
 
   refreshSelectionBar()
   refreshLiveButtons()
+  refreshLibraryButtons()
   refreshLiveChrome()
   libraryCountEl.textContent = t('library.count', { count: state.streams.length })
 
