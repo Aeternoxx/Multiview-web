@@ -374,9 +374,10 @@ a:focus-visible {
 }
 
 .library-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  justify-content: start;
 }
 
 .library-row {
@@ -518,6 +519,7 @@ a:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
+  justify-content: center;
   gap: 18px;
   min-width: 0;
 }
