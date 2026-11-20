@@ -69,7 +69,7 @@ const FR = {
   'stream.resizeHint': 'Redimensionner en conservant le ratio vidéo',
   'stream.stats': 'Statistiques',
   'stream.offlineHint':
-    'Aucun flux détecté sur ce serveur. La lecture sera possible dès que la diffusion sera active.',
+    'Aucun flux détecté sur ce serveur. La lecture sera possible dès que la diffusion sera active. Si le serveur est sur ton réseau local, autorise l’« accès au réseau local » pour ce site dans les permissions du navigateur.',
   'stream.startUnavailable': 'Flux indisponible — lecture désactivée',
   'stream.retry': 'Réessayer',
   'stats.bitrate': 'Débit',
@@ -160,7 +160,7 @@ const EN = {
   'stream.resizeHint': 'Resize while preserving video aspect ratio',
   'stream.stats': 'Statistics',
   'stream.offlineHint':
-    'No stream detected on this server. Playback will be available as soon as the stream goes live.',
+    'No stream detected on this server. Playback will be available as soon as the stream goes live. If the server is on your local network, allow “local network access” for this site in your browser permissions.',
   'stream.startUnavailable': 'Stream unavailable — playback disabled',
   'stream.retry': 'Retry',
   'stats.bitrate': 'Bitrate',

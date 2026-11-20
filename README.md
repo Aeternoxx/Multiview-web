@@ -65,6 +65,22 @@ Sans STUN/TURN configurés, seuls les candidats locaux sont utilisés : parfait
 sur le même réseau (LAN). Pour traverser Internet, renseigne un serveur STUN
 ou TURN dans **Paramètres**.
 
+## Permissions navigateur (IMPORTANT avec une page HTTPS)
+
+Depuis une page servie en ligne (comme `*.pages.dev`), les navigateurs modernes
+bloquent l'accès aux adresses **locales/privées** (restrictions « mixed content »
+et « accès au réseau local ») :
+
+- **Chrome / Edge** : si le MediaMTX est sur le réseau local, autorise
+  **« Accès au réseau local »** pour le site (icône de réglages dans la barre
+  d'adresse, ou `chrome://settings/content/localNetworkAccess`). Sans ça, les
+  flux restent « indisponibles » alors que tout fonctionne en `http://localhost`.
+- **Safari (macOS/iOS)** : une invitation « réseau local » apparaît la première
+  fois — l'accepter.
+- Les spectateurs **hors du réseau local** ne sont pas concernés par cette
+  permission, mais il faut alors rediriger l'**UDP 8189** (port ICE de MediaMTX)
+  du routeur vers la machine MediaMTX pour que WebRTC les atteigne.
+
 ## Déploiement sur Cloudflare Pages
 
 ### Option A — via GitHub (recommandé)
