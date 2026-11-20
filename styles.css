@@ -361,13 +361,6 @@ a:focus-visible {
 
 /* ---------- Bibliothèque ---------- */
 
-.heading-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .library-actions {
   display: flex;
   flex-wrap: wrap;
@@ -375,10 +368,14 @@ a:focus-visible {
   gap: 8px;
 }
 
+/* Launch row shown between the heading and the list: the heading buttons
+   never move when a selection appears or goes away. */
 .selection-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  margin: -8px 0 16px;
 }
 
 #selection-count {

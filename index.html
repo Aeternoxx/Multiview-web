@@ -88,18 +88,18 @@
             <p id="library-count"></p>
           </div>
 
-          <div class="heading-actions">
-            <div id="library-actions" class="library-actions" hidden>
-              <button id="library-select-all" class="secondary-button" type="button"></button>
-              <button id="library-clear-selection" class="secondary-button" type="button"></button>
-              <button id="library-refresh" class="secondary-button" type="button"></button>
-            </div>
-
-            <div id="selection-bar" class="selection-bar" hidden>
-              <span id="selection-count"></span>
-              <button id="launch-selected" class="primary-button" type="button"></button>
-            </div>
+          <div id="library-actions" class="library-actions" hidden>
+            <button id="library-select-all" class="secondary-button" type="button"></button>
+            <button id="library-clear-selection" class="secondary-button" type="button"></button>
+            <button id="library-refresh" class="secondary-button" type="button"></button>
           </div>
+        </div>
+
+        <!-- Barre de lancement : posée sous l'en-tête, son apparition ne
+             décale jamais les boutons d'action de la bibliothèque. -->
+        <div id="selection-bar" class="selection-bar" hidden>
+          <span id="selection-count"></span>
+          <button id="launch-selected" class="primary-button" type="button"></button>
         </div>
 
         <div id="empty-state" class="empty-state" hidden>
