@@ -33,8 +33,22 @@ const FR = {
   'empty.title': 'Votre espace vidéo est prêt',
   'empty.body': 'Ajoutez un flux WHEP pour commencer.',
   'empty.action': 'Ajouter votre premier flux',
-  'workspace.title': 'Vue principale',
-  'workspace.count': '{count} flux configuré(s)',
+  'tabs.library': 'Bibliothèque',
+  'tabs.live': 'Live',
+  'library.title': 'Bibliothèque',
+  'library.count': '{count} flux configuré(s)',
+  'library.launchSelected': 'Lancer la sélection',
+  'library.selectedCount': '{count} sélectionné(s)',
+  'library.selectFor': 'Sélectionner {name}',
+  'library.playing': 'En lecture',
+  'live.title': 'Vue Live',
+  'live.count': '{count} flux en lecture',
+  'live.fit': 'Ajuster',
+  'live.fitHint': 'Redimensionner les vignettes pour remplir la fenêtre selon le nombre de flux',
+  'live.stopAll': 'Tout arrêter',
+  'live.empty.title': 'Aucun flux en lecture',
+  'live.empty.body': 'Lancez un ou plusieurs flux depuis la Bibliothèque pour les afficher ici.',
+  'live.empty.action': 'Ouvrir la Bibliothèque',
   'stream.status.stopped': 'Arrêté',
   'stream.status.checking': 'Vérification du flux…',
   'stream.status.online': 'flux détecté',
@@ -124,8 +138,22 @@ const EN = {
   'empty.title': 'Your video space is ready',
   'empty.body': 'Add a WHEP stream to get started.',
   'empty.action': 'Add your first stream',
-  'workspace.title': 'Main view',
-  'workspace.count': '{count} configured stream(s)',
+  'tabs.library': 'Library',
+  'tabs.live': 'Live',
+  'library.title': 'Library',
+  'library.count': '{count} configured stream(s)',
+  'library.launchSelected': 'Launch selection',
+  'library.selectedCount': '{count} selected',
+  'library.selectFor': 'Select {name}',
+  'library.playing': 'Playing',
+  'live.title': 'Live view',
+  'live.count': '{count} stream(s) playing',
+  'live.fit': 'Fit',
+  'live.fitHint': 'Resize the tiles to fill the window according to the number of streams',
+  'live.stopAll': 'Stop all',
+  'live.empty.title': 'No stream playing',
+  'live.empty.body': 'Start one or more streams from the Library to display them here.',
+  'live.empty.action': 'Open the Library',
   'stream.status.stopped': 'Stopped',
   'stream.status.checking': 'Checking stream…',
   'stream.status.online': 'stream detected',
@@ -236,6 +264,9 @@ const ICONS = {
     '<path d="M20 15h-3v5h1.5A1.5 1.5 0 0 0 20 18.5Z"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
+  fit:
+    '<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/>' +
+    '<rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>',
   offline: '<circle cx="12" cy="12" r="8"/><path d="M6.6 17.4 17.4 6.6"/>',
   spinner: '<circle cx="12" cy="12" r="8" opacity="0.25"/><path d="M20 12a8 8 0 0 0-8-8"/>'
 }
@@ -1076,6 +1107,10 @@ function writeJson(key, value) {
 const state = {
   streams: readJson(STORAGE_KEYS.streams, parseStreams, []),
   running: new Set(),
+  /** IDs des flux cochés en bibliothèque pour un lancement groupé. */
+  selected: new Set(),
+  /** Vue active : 'library' (par défaut à l'ouverture) ou 'live'. */
+  view: 'library',
   audioMap: readJson(STORAGE_KEYS.audio, parseAudioMap, {}),
   tileSizes: readJson(STORAGE_KEYS.tileSizes, parseTileSizes, {}),
   /** Ratios mesurés à l'exécution, non persistés. */
@@ -1116,9 +1151,21 @@ function isSolo(id) {
 
 /* --------------------------- références DOM ------------------------------ */
 
+const libraryViewEl = document.getElementById('library-view')
+const liveViewEl = document.getElementById('live-view')
+const libraryListEl = document.getElementById('library-list')
 const gridEl = document.getElementById('stream-grid')
 const emptyEl = document.getElementById('empty-state')
-const countEl = document.getElementById('stream-count')
+const liveEmptyEl = document.getElementById('live-empty')
+const libraryCountEl = document.getElementById('library-count')
+const liveCountEl = document.getElementById('live-count')
+const selectionBarEl = document.getElementById('selection-bar')
+const selectionCountEl = document.getElementById('selection-count')
+const launchSelectedBtn = document.getElementById('launch-selected')
+const liveFitBtn = document.getElementById('live-fit')
+const liveStopAllBtn = document.getElementById('live-stop-all')
+const tabLibraryBtn = document.getElementById('tab-library')
+const tabLiveBtn = document.getElementById('tab-live')
 
 const formBackdrop = document.getElementById('form-backdrop')
 const settingsBackdrop = document.getElementById('settings-backdrop')
@@ -1413,11 +1460,11 @@ const STATS_ROWS = [
   ['stats.dropped', (s) => formatCount(s.droppedFrames)]
 ]
 
-/** Boucle de sondage de la disponibilité, comme useStreamAvailability. */
-const OFFLINE_INTERVAL_MS = 30_000
-const ONLINE_INTERVAL_MS = 60_000
-const HIDDEN_INTERVAL_MS = 15_000
-
+/**
+ * Vignette de la vue Live : un seul flux en cours de lecture. Contrairement à
+ * l'ancienne carte mixte, elle n'existe que tant que le flux tourne ; la
+ * gestion (édition, suppression, disponibilité) vit dans la bibliothèque.
+ */
 class Tile {
   constructor(stream) {
     this.stream = stream
@@ -1428,38 +1475,18 @@ class Tile {
     this.hasVideo = false
     this.statsOpen = false
     this.aspectRatio = null
-    this.availLoop = null
-    this.onVisibilityChange = null
 
     const el = document.createElement('div')
     el.className = 'sortable-stream'
     el.draggable = true
     el.innerHTML = `
-      <article class="stream-card">
-        <div class="stream-info">
-          <div class="stream-details">
-            <h3 class="stream-name"></h3>
-            <p class="stream-url"></p>
-            <div class="status-line">
-              <span class="availability-dot checking" title=""></span>
-              <span class="stream-status"></span>
-            </div>
-            <p class="player-error inline-error" hidden></p>
-          </div>
-          <div class="stream-actions">
-            <button class="icon-button" data-act="toggle" type="button"></button>
-            <button class="icon-button" data-act="stats" type="button" hidden>${icon('stats', 15)}</button>
-            <button class="icon-button" data-act="edit" type="button">${icon('edit', 15)}</button>
-            <button class="delete-button" data-act="delete" type="button">${icon('trash', 17)}</button>
-          </div>
-        </div>
+      <article class="stream-card live-card">
         <div class="video-container">
           <video playsinline autoplay></video>
-          <div class="player-overlay idle-overlay">
-            <span class="video-symbol"></span>
-            <span class="overlay-title"></span>
-            <span class="overlay-hint" hidden></span>
-            <button class="overlay-action" data-act="start" type="button" hidden></button>
+          <div class="live-name">
+            <span class="availability-dot checking" title=""></span>
+            <span class="live-name-text"></span>
+            <span class="live-status"></span>
           </div>
           <div class="player-overlay busy-overlay" hidden>
             <span class="video-symbol"></span>
@@ -1468,6 +1495,8 @@ class Tile {
             <button class="overlay-action" data-act="retry" type="button" hidden></button>
           </div>
           <div class="view-controls">
+            <button type="button" data-act="stop"></button>
+            <button type="button" data-act="stats">${icon('stats', 15)}</button>
             <button type="button" data-act="fullscreen"></button>
           </div>
           <div class="stats-panel" hidden>
@@ -1488,19 +1517,13 @@ class Tile {
       </article>`
 
     this.el = el
-    this.info = el.querySelector('.stream-info')
     this.videoContainer = el.querySelector('.video-container')
     this.video = el.querySelector('video')
-    this.nameEl = el.querySelector('.stream-name')
-    this.urlEl = el.querySelector('.stream-url')
-    this.dot = el.querySelector('.availability-dot')
-    this.statusTextEl = el.querySelector('.stream-status')
-    this.inlineErrorEl = el.querySelector('.inline-error')
-    this.toggleBtn = el.querySelector('[data-act="toggle"]')
+    this.dot = el.querySelector('.live-name .availability-dot')
+    this.nameTextEl = el.querySelector('.live-name-text')
+    this.liveStatusEl = el.querySelector('.live-status')
+    this.stopBtn = el.querySelector('[data-act="stop"]')
     this.statsBtn = el.querySelector('[data-act="stats"]')
-    this.editBtn = el.querySelector('[data-act="edit"]')
-    this.deleteBtn = el.querySelector('[data-act="delete"]')
-    this.idleOverlay = el.querySelector('.idle-overlay')
     this.busyOverlay = el.querySelector('.busy-overlay')
     this.fullscreenBtn = el.querySelector('[data-act="fullscreen"]')
     this.statsPanel = el.querySelector('.stats-panel')
@@ -1511,7 +1534,6 @@ class Tile {
 
     this.bindEvents()
     this.refreshAll()
-    this.startAvailabilityLoop()
   }
 
   get running() {
@@ -1520,12 +1542,11 @@ class Tile {
 
   destroy() {
     this.player.deactivate()
-    this.stopAvailabilityLoop()
     this.el.remove()
   }
 
   bindEvents() {
-    this.toggleBtn.addEventListener('click', () => toggleRunning(this.stream.id))
+    this.stopBtn.addEventListener('click', () => stopRunning(this.stream.id))
 
     this.statsBtn.addEventListener('click', () => {
       this.statsOpen = !this.statsOpen
@@ -1533,9 +1554,6 @@ class Tile {
       this.statsBtn.classList.toggle('active', this.statsOpen)
       this.setStats(null)
     })
-
-    this.editBtn.addEventListener('click', () => openStreamForm(this.stream))
-    this.deleteBtn.addEventListener('click', () => openConfirm(this.stream))
 
     this.video.addEventListener('click', () => {
       if (this.running) this.video.play().catch(() => undefined)
@@ -1570,10 +1588,6 @@ class Tile {
     })
 
     document.addEventListener('fullscreenchange', () => this.refreshFullscreenButton())
-
-    this.idleOverlay.querySelector('[data-act="start"]').addEventListener('click', () => {
-      toggleRunning(this.stream.id)
-    })
 
     this.busyOverlay.querySelector('[data-act="retry"]').addEventListener('click', () => {
       this.player.retry()
@@ -1633,57 +1647,6 @@ class Tile {
     }
   }
 
-  /* -------- boucle de disponibilité (portage de useStreamAvailability) ---- */
-
-  startAvailabilityLoop() {
-    this.stopAvailabilityLoop()
-
-    const loop = { cancelled: false, timer: null }
-    this.availLoop = loop
-
-    const schedule = (delay) => {
-      if (loop.cancelled) return
-      if (loop.timer) clearTimeout(loop.timer)
-      loop.timer = setTimeout(() => check(), delay)
-    }
-
-    const check = async () => {
-      if (loop.cancelled) return
-
-      if (document.hidden) {
-        schedule(HIDDEN_INTERVAL_MS)
-        return
-      }
-
-      const online = await probeStreamCached(this.stream.url, toIceServers(state.ice))
-      if (loop.cancelled) return
-
-      setAvailability(this.stream.url, online ? 'online' : 'offline')
-      schedule(online ? ONLINE_INTERVAL_MS : OFFLINE_INTERVAL_MS)
-    }
-
-    this.onVisibilityChange = () => {
-      if (!document.hidden) schedule(0)
-    }
-    document.addEventListener('visibilitychange', this.onVisibilityChange)
-
-    // Décalage aléatoire pour que la grille ne sonde pas tout d'un coup.
-    schedule(600 + Math.random() * 1200)
-  }
-
-  stopAvailabilityLoop() {
-    if (this.availLoop) {
-      this.availLoop.cancelled = true
-      if (this.availLoop.timer) clearTimeout(this.availLoop.timer)
-      this.availLoop = null
-    }
-
-    if (this.onVisibilityChange) {
-      document.removeEventListener('visibilitychange', this.onVisibilityChange)
-      this.onVisibilityChange = null
-    }
-  }
-
   /* ----------------------------- actions -------------------------------- */
 
   onUnavailable() {
@@ -1691,11 +1654,7 @@ class Tile {
     // « online » précédent et une nouvelle sonde tranchera.
     invalidateProbeCache(this.stream.url)
     setAvailability(this.stream.url, 'checking')
-
-    if (state.running.delete(this.stream.id)) {
-      this.refreshRunning()
-      this.startAvailabilityLoop()
-    }
+    stopRunning(this.stream.id)
   }
 
   restartPlayer() {
@@ -1707,9 +1666,9 @@ class Tile {
     event.stopPropagation()
 
     const rect = this.el.getBoundingClientRect()
-    const headerHeight = this.info.getBoundingClientRect().height || 72
+    const headerHeight = 0
     const ratio =
-      this.aspectRatio || state.aspectRatios[this.stream.id] || rect.width / Math.max(1, rect.height - headerHeight)
+      this.aspectRatio || state.aspectRatios[this.stream.id] || rect.width / Math.max(1, rect.height)
     const maxWidth = Math.max(MIN_TILE_WIDTH, gridEl.getBoundingClientRect().width)
 
     const startX = event.clientX
@@ -1765,9 +1724,7 @@ class Tile {
 
   refreshAll() {
     this.refreshLabels()
-    this.refreshRunning()
     this.refreshStatus()
-    this.refreshAvailability()
     this.refreshAudio()
     this.refreshSize()
     this.refreshFullscreenButton()
@@ -1775,13 +1732,13 @@ class Tile {
   }
 
   refreshLabels() {
-    this.nameEl.textContent = this.stream.name
-    this.urlEl.textContent = this.stream.url
-    this.urlEl.title = this.stream.url
-    this.editBtn.title = t('stream.edit')
-    this.editBtn.setAttribute('aria-label', t('stream.edit'))
-    this.deleteBtn.title = t('stream.delete')
-    this.deleteBtn.setAttribute('aria-label', t('stream.deleteLabel', { name: this.stream.name }))
+    this.nameTextEl.textContent = this.stream.name
+    this.el.setAttribute('aria-label', this.stream.name)
+
+    this.stopBtn.innerHTML = `${icon('stop', 14)}<span>${t('stream.stop')}</span>`
+    this.stopBtn.title = t('stream.stop')
+    this.stopBtn.setAttribute('aria-label', t('stream.stop'))
+
     this.grip.title = t('stream.resizeHint')
     this.grip.setAttribute('aria-label', t('stream.resize', { name: this.stream.name }))
     this.statsBtn.title = t('stream.stats')
@@ -1795,132 +1752,46 @@ class Tile {
     const retryBtn = this.busyOverlay.querySelector('[data-act="retry"]')
     retryBtn.innerHTML = `${icon('refresh', 14)}<span>${t('stream.retry')}</span>`
 
-    this.refreshRunning()
     this.refreshStatus()
-    this.refreshAvailability()
     this.refreshAudio()
     this.refreshFullscreenButton()
   }
 
-  refreshRunning() {
-    const running = this.running
-    const availability = getAvailability(this.stream.url)
-
-    // Lecture impossible tant que le flux n'a pas été détecté.
-    const startBlocked = !running && availability === 'offline'
-    const startLabel = running
-      ? t('stream.stop')
-      : startBlocked
-        ? t('stream.startUnavailable')
-        : t('stream.start')
-
-    this.toggleBtn.innerHTML = icon(running ? 'stop' : 'play', 18)
-    this.toggleBtn.title = startLabel
-    this.toggleBtn.setAttribute('aria-label', startLabel)
-    this.toggleBtn.disabled = startBlocked
-
-    this.statsBtn.hidden = !running
-    if (!running) {
-      this.statsOpen = false
-      this.statsPanel.hidden = true
-      this.statsBtn.classList.remove('active')
-    }
-
-    this.idleOverlay.hidden = running
-    this.busyOverlay.hidden = !running
-  }
-
   refreshStatus() {
-    const running = this.running
-    const availability = getAvailability(this.stream.url)
-
-    const dotState = running
-      ? this.status === 'live'
-        ? 'online'
-        : this.status === 'error'
-          ? 'offline'
-          : 'checking'
-      : availability
+    const dotState =
+      this.status === 'live' ? 'online' : this.status === 'error' ? 'offline' : 'checking'
 
     this.dot.className = `availability-dot ${dotState}`
     this.dot.title = t(AVAILABILITY_KEYS[dotState])
 
-    this.statusTextEl.textContent = running
-      ? t(STATUS_KEYS[this.status] ?? 'stream.status.stopped')
-      : `${t('stream.status.stopped')} · ${t(
-          availability === 'online'
-            ? 'stream.status.online'
-            : availability === 'offline'
-              ? 'stream.status.offline'
-              : 'stream.status.checking'
-        )}`
+    this.liveStatusEl.textContent = t(STATUS_KEYS[this.status] ?? 'stream.status.stopped')
 
-    if (this.error && running) {
-      this.inlineErrorEl.textContent = describeWhepError(this.error)
-      this.inlineErrorEl.title = this.error.message
-      this.inlineErrorEl.hidden = false
-    } else {
-      this.inlineErrorEl.hidden = true
-    }
+    const showBusy = !this.hasVideo || this.status !== 'live'
+    this.busyOverlay.hidden = !showBusy
 
-    if (running) {
-      const showBusy = !this.hasVideo || this.status !== 'live'
-      this.busyOverlay.hidden = !showBusy
-
-      if (showBusy) {
-        const symbol = this.busyOverlay.querySelector('.video-symbol')
-        symbol.innerHTML =
-          this.status === 'error'
-            ? icon('offline', 20)
-            : icon('spinner', 20, 'icon-spin')
-
-        this.busyOverlay.querySelector('.overlay-title').textContent = t(
-          STATUS_KEYS[this.status] ?? 'stream.status.stopped'
-        )
-
-        const errorEl = this.busyOverlay.querySelector('.player-error')
-        if (this.error) {
-          errorEl.textContent = describeWhepError(this.error)
-          errorEl.title = this.error.message
-          errorEl.hidden = false
-        } else {
-          errorEl.hidden = true
-        }
-
-        const retryBtn = this.busyOverlay.querySelector('[data-act="retry"]')
-        retryBtn.hidden = !(this.status === 'error' || this.status === 'disconnected')
-      }
-    }
-  }
-
-  refreshAvailability() {
-    if (this.running) return
-
-    const availability = getAvailability(this.stream.url)
-    const symbol = this.idleOverlay.querySelector('.video-symbol')
-    symbol.innerHTML =
-      availability === 'online'
-        ? icon('play', 20)
-        : availability === 'offline'
+    if (showBusy) {
+      const symbol = this.busyOverlay.querySelector('.video-symbol')
+      symbol.innerHTML =
+        this.status === 'error'
           ? icon('offline', 20)
           : icon('spinner', 20, 'icon-spin')
 
-    this.idleOverlay.querySelector('.overlay-title').textContent = t(
-      AVAILABILITY_KEYS[availability]
-    )
+      this.busyOverlay.querySelector('.overlay-title').textContent = t(
+        STATUS_KEYS[this.status] ?? 'stream.status.stopped'
+      )
 
-    this.idleOverlay.classList.toggle('is-offline', availability === 'offline')
+      const errorEl = this.busyOverlay.querySelector('.player-error')
+      if (this.error) {
+        errorEl.textContent = describeWhepError(this.error)
+        errorEl.title = this.error.message
+        errorEl.hidden = false
+      } else {
+        errorEl.hidden = true
+      }
 
-    const hint = this.idleOverlay.querySelector('.overlay-hint')
-    hint.textContent = t('stream.offlineHint')
-    hint.hidden = availability !== 'offline'
-
-    const startBtn = this.idleOverlay.querySelector('[data-act="start"]')
-    startBtn.innerHTML = `${icon('play', 14)}<span>${t('stream.start')}</span>`
-    startBtn.hidden = availability !== 'online'
-
-    this.refreshRunning()
-    this.refreshStatus()
+      const retryBtn = this.busyOverlay.querySelector('[data-act="retry"]')
+      retryBtn.hidden = !(this.status === 'error' || this.status === 'disconnected')
+    }
   }
 
   refreshAudio() {
@@ -1974,57 +1845,457 @@ class Tile {
   }
 }
 
-/* ------------------------- gestion de la grille -------------------------- */
+/* ------------------------------- bibliothèque ---------------------------- */
+
+/**
+ * Ligne simplifiée de la vue Bibliothèque : pas de vidéo, mais la disponibilité
+ * (sondée uniquement quand la bibliothèque est active) et les actions de
+ * gestion. Le bouton lecture ouvre le flux dans la vue Live.
+ */
+class LibraryRow {
+  constructor(stream) {
+    this.stream = stream
+
+    const el = document.createElement('div')
+    el.className = 'library-row'
+    el.draggable = true
+    el.innerHTML = `
+      <input type="checkbox" class="row-select" />
+      <div class="row-main">
+        <div class="row-title">
+          <h3 class="row-name"></h3>
+          <span class="row-playing" hidden></span>
+        </div>
+        <p class="row-url"></p>
+        <div class="status-line">
+          <span class="availability-dot checking" title=""></span>
+          <span class="row-status"></span>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="icon-button" data-act="toggle" type="button"></button>
+        <button class="icon-button" data-act="edit" type="button">${icon('edit', 15)}</button>
+        <button class="delete-button" data-act="delete" type="button">${icon('trash', 17)}</button>
+      </div>`
+
+    this.el = el
+    this.selectEl = el.querySelector('.row-select')
+    this.nameEl = el.querySelector('.row-name')
+    this.playingEl = el.querySelector('.row-playing')
+    this.urlEl = el.querySelector('.row-url')
+    this.dot = el.querySelector('.availability-dot')
+    this.statusTextEl = el.querySelector('.row-status')
+    this.toggleBtn = el.querySelector('[data-act="toggle"]')
+    this.editBtn = el.querySelector('[data-act="edit"]')
+    this.deleteBtn = el.querySelector('[data-act="delete"]')
+
+    this.bindEvents()
+    this.refreshAll()
+  }
+
+  get running() {
+    return state.running.has(this.stream.id)
+  }
+
+  destroy() {
+    this.el.remove()
+  }
+
+  bindEvents() {
+    this.selectEl.addEventListener('change', () => {
+      if (this.selectEl.checked) state.selected.add(this.stream.id)
+      else state.selected.delete(this.stream.id)
+      this.refreshState()
+      refreshSelectionBar()
+    })
+
+    this.toggleBtn.addEventListener('click', () => {
+      if (this.running) stopRunning(this.stream.id)
+      else startStreams([this.stream.id])
+    })
+
+    this.editBtn.addEventListener('click', () => openStreamForm(this.stream))
+    this.deleteBtn.addEventListener('click', () => openConfirm(this.stream))
+
+    // Réordonnancement par glisser-déposer, comme les vignettes Live.
+    this.el.addEventListener('dragstart', (event) => {
+      const target = event.target
+      if (
+        target &&
+        typeof target.closest === 'function' &&
+        target.closest('button, input, .row-actions')
+      ) {
+        event.preventDefault()
+        return
+      }
+
+      draggedId = this.stream.id
+      this.el.classList.add('dragging')
+    })
+
+    this.el.addEventListener('dragend', () => {
+      draggedId = null
+      this.el.classList.remove('dragging')
+    })
+
+    this.el.addEventListener('dragover', (event) => event.preventDefault())
+
+    this.el.addEventListener('drop', (event) => {
+      event.preventDefault()
+      reorderStream(this.stream.id)
+    })
+  }
+
+  refreshAll() {
+    this.refreshLabels()
+    this.refreshState()
+  }
+
+  refreshLabels() {
+    this.nameEl.textContent = this.stream.name
+    this.urlEl.textContent = this.stream.url
+    this.urlEl.title = this.stream.url
+    this.playingEl.textContent = t('library.playing')
+    this.editBtn.title = t('stream.edit')
+    this.editBtn.setAttribute('aria-label', t('stream.edit'))
+    this.deleteBtn.title = t('stream.delete')
+    this.deleteBtn.setAttribute('aria-label', t('stream.deleteLabel', { name: this.stream.name }))
+    this.selectEl.setAttribute('aria-label', t('library.selectFor', { name: this.stream.name }))
+  }
+
+  refreshState() {
+    const running = this.running
+    const availability = getAvailability(this.stream.url)
+
+    const dotState = running ? 'online' : availability
+    this.dot.className = `availability-dot ${dotState}`
+    this.dot.title = t(AVAILABILITY_KEYS[dotState])
+
+    this.statusTextEl.textContent = running
+      ? t('library.playing')
+      : `${t('stream.status.stopped')} · ${t(
+          availability === 'online'
+            ? 'stream.status.online'
+            : availability === 'offline'
+              ? 'stream.status.offline'
+              : 'stream.status.checking'
+        )}`
+
+    this.playingEl.hidden = !running
+    this.el.classList.toggle('is-running', running)
+
+    const startLabel = running ? t('stream.stop') : t('stream.start')
+    this.toggleBtn.innerHTML = icon(running ? 'stop' : 'play', 18)
+    this.toggleBtn.title = startLabel
+    this.toggleBtn.setAttribute('aria-label', startLabel)
+    this.toggleBtn.disabled = !running && availability === 'offline'
+
+    // Une case ne reste cochable que pour un flux prêt à être lancé.
+    const selectable = !running && availability === 'online'
+    this.selectEl.disabled = !selectable
+    if (!selectable && state.selected.delete(this.stream.id)) this.selectEl.checked = false
+    else this.selectEl.checked = state.selected.has(this.stream.id)
+
+    this.el.classList.toggle('selected', state.selected.has(this.stream.id))
+  }
+}
+
+/* ------ sondes de disponibilité : actives uniquement en bibliothèque ------ */
+
+/** Cadences héritées de useStreamAvailability (desktop). */
+const OFFLINE_INTERVAL_MS = 30_000
+const ONLINE_INTERVAL_MS = 60_000
+const HIDDEN_INTERVAL_MS = 15_000
+
+const probeLoops = new Map()
+
+function startProbeLoop(stream) {
+  stopProbeLoop(stream.id)
+
+  const loop = { cancelled: false, timer: null, cleanup: null }
+  probeLoops.set(stream.id, loop)
+
+  const schedule = (delay) => {
+    if (loop.cancelled) return
+    if (loop.timer) clearTimeout(loop.timer)
+    loop.timer = setTimeout(() => check(), delay)
+  }
+
+  const check = async () => {
+    if (loop.cancelled) return
+
+    if (document.hidden) {
+      schedule(HIDDEN_INTERVAL_MS)
+      return
+    }
+
+    // stream.url suit les modifications : l'objet est partagé avec l'état.
+    const online = await probeStreamCached(stream.url, toIceServers(state.ice))
+    if (loop.cancelled) return
+
+    setAvailability(stream.url, online ? 'online' : 'offline')
+    schedule(online ? ONLINE_INTERVAL_MS : OFFLINE_INTERVAL_MS)
+  }
+
+  const onVisibilityChange = () => {
+    if (!document.hidden) schedule(0)
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  loop.cleanup = () => document.removeEventListener('visibilitychange', onVisibilityChange)
+
+  // Décalage aléatoire pour que la liste ne sonde pas tout d'un coup.
+  schedule(600 + Math.random() * 1200)
+}
+
+function stopProbeLoop(id) {
+  const loop = probeLoops.get(id)
+  if (!loop) return
+
+  loop.cancelled = true
+  if (loop.timer) clearTimeout(loop.timer)
+  loop.cleanup?.()
+  probeLoops.delete(id)
+}
+
+/** Démarre ou interrompt les sondes selon la vue active (bibliothèque seule). */
+function refreshProbeLoops() {
+  const probing = state.view === 'library'
+
+  for (const stream of state.streams) {
+    const shouldRun = probing && !state.running.has(stream.id)
+    if (shouldRun && !probeLoops.has(stream.id)) startProbeLoop(stream)
+    else if (!shouldRun && probeLoops.has(stream.id)) stopProbeLoop(stream.id)
+  }
+}
+
+/* --------------------------- vues bibliothèque / live -------------------- */
+
+function setView(view) {
+  if (view !== 'library' && view !== 'live') return
+
+  state.view = view
+  libraryViewEl.hidden = view !== 'library'
+  liveViewEl.hidden = view !== 'live'
+  tabLibraryBtn.classList.toggle('active', view === 'library')
+  tabLiveBtn.classList.toggle('active', view === 'live')
+  tabLibraryBtn.setAttribute('aria-selected', String(view === 'library'))
+  tabLiveBtn.setAttribute('aria-selected', String(view === 'live'))
+
+  // En revenant en bibliothèque, les lignes reprennent l'état pris pendant que
+  // les vignettes Live vivaient de leur côté.
+  if (view === 'library') renderLibrary()
+
+  refreshProbeLoops()
+}
+
+tabLibraryBtn.addEventListener('click', () => setView('library'))
+tabLiveBtn.addEventListener('click', () => setView('live'))
+document.getElementById('live-open-library').addEventListener('click', () => setView('library'))
+
+/* --------------------- ajustement automatique du Live -------------------- */
+
+const DEFAULT_ASPECT_RATIO = 16 / 9
+
+/**
+ * Redimensionne les vignettes en cours de lecture pour remplir la fenêtre :
+ * le nombre de colonnes maximise la surface utile selon le ratio vidéo moyen.
+ * Les tailles obtenues écrasent les tailles manuelles ; la poignée reprend la
+ * main jusqu'au prochain ajustement.
+ */
+function autoFitLiveGrid() {
+  const ids = state.streams
+    .filter((stream) => state.running.has(stream.id))
+    .map((stream) => stream.id)
+  const count = ids.length
+  if (count === 0) return
+
+  const gridRect = gridEl.getBoundingClientRect()
+  const gridWidth = gridRect.width
+  if (gridWidth <= 0) return
+
+  const style = getComputedStyle(gridEl)
+  const columnGap = parseFloat(style.columnGap) || 18
+  const rowGap = parseFloat(style.rowGap) || columnGap
+
+  const footerRect = document.querySelector('.footer').getBoundingClientRect()
+  const workspacePad = parseFloat(getComputedStyle(liveViewEl).paddingBottom) || 12
+  const availHeight = Math.max(
+    MIN_TILE_HEIGHT,
+    window.innerHeight - gridRect.top - footerRect.height - workspacePad - 6
+  )
+
+  let ratioSum = 0
+  for (const id of ids) ratioSum += state.aspectRatios[id] ?? DEFAULT_ASPECT_RATIO
+  const avgRatio = ratioSum / count
+
+  let best = null
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols)
+    const cellW = (gridWidth - (cols - 1) * columnGap) / cols
+    const cellH = (availHeight - (rows - 1) * rowGap) / rows
+    if (cellW < MIN_TILE_WIDTH || cellH < MIN_TILE_HEIGHT) continue
+
+    const width = Math.min(cellW, cellH * avgRatio)
+    const area = width * (width / avgRatio)
+    if (!best || area > best.area) best = { width, area }
+  }
+
+  if (!best) {
+    // Les tailles minimales ne tiennent pas toutes : une colonne, défilement.
+    best = { width: Math.min(Math.max(gridWidth, MIN_TILE_WIDTH), availHeight * avgRatio) }
+  }
+
+  const width = Math.round(Math.max(MIN_TILE_WIDTH, best.width))
+  const height = Math.round(Math.max(MIN_TILE_HEIGHT, width / avgRatio))
+
+  for (const id of ids) {
+    state.tileSizes[id] = { width, height }
+    const tile = tiles.get(id)
+    if (tile) tile.refreshSize()
+  }
+
+  writeJson(STORAGE_KEYS.tileSizes, state.tileSizes)
+}
+
+/* ------------------------- gestion des listes ---------------------------- */
 
 const tiles = new Map()
+const rows = new Map()
 let draggedId = null
 
-function renderGrid() {
-  // Détruit les tuiles des flux supprimés.
-  for (const [id, tile] of tiles) {
+function renderLibrary() {
+  // Détruit les lignes des flux supprimés.
+  for (const [id, row] of rows) {
     if (!state.streams.some((stream) => stream.id === id)) {
+      row.destroy()
+      stopProbeLoop(id)
+      rows.delete(id)
+      state.selected.delete(id)
+    }
+  }
+
+  // Réordonne par append : les éléments existants sont déplacés, jamais recréés.
+  for (const stream of state.streams) {
+    let row = rows.get(stream.id)
+    if (!row) {
+      row = new LibraryRow(stream)
+      rows.set(stream.id, row)
+    }
+    row.stream = stream
+    row.refreshLabels()
+    row.refreshState()
+    libraryListEl.appendChild(row.el)
+  }
+
+  emptyEl.hidden = state.streams.length !== 0
+  libraryListEl.hidden = state.streams.length === 0
+  libraryCountEl.textContent = t('library.count', { count: state.streams.length })
+  refreshSelectionBar()
+}
+
+function renderLive() {
+  // Un flux arrêté n'a plus de vignette ; destroy() coupe le lecteur.
+  for (const [id, tile] of tiles) {
+    if (!state.running.has(id)) {
       tile.destroy()
       tiles.delete(id)
     }
   }
 
-  // Crée les nouvelles tuiles et réordonne par append (les éléments existants
-  // sont déplacés, les flux vidéo en cours ne sont donc pas coupés).
+  // Réordonne par append : les vignettes en cours ne sont jamais recréées,
+  // la lecture n'est donc jamais coupée par un simple réordonnancement.
   for (const stream of state.streams) {
+    if (!state.running.has(stream.id)) continue
+
     let tile = tiles.get(stream.id)
     if (!tile) {
       tile = new Tile(stream)
       tiles.set(stream.id, tile)
+      tile.player.activate()
     }
     tile.stream = stream
     tile.refreshLabels()
     gridEl.appendChild(tile.el)
   }
 
-  emptyEl.hidden = state.streams.length !== 0
-  gridEl.hidden = state.streams.length === 0
-  countEl.textContent = t('workspace.count', { count: state.streams.length })
+  refreshLiveChrome()
 }
 
-function toggleRunning(id) {
-  const tile = tiles.get(id)
-  if (!tile) return
+function refreshLiveChrome() {
+  const count = state.running.size
+  liveEmptyEl.hidden = count !== 0
+  gridEl.hidden = count === 0
+  liveCountEl.textContent = t('live.count', { count })
+  liveFitBtn.hidden = count === 0
+  liveStopAllBtn.hidden = count === 0
+}
 
-  if (state.running.has(id)) {
-    state.running.delete(id)
-    tile.player.deactivate()
-    tile.refreshRunning()
-    tile.startAvailabilityLoop()
-  } else {
+function refreshSelectionBar() {
+  const count = state.selected.size
+  selectionBarEl.hidden = count === 0
+  selectionCountEl.textContent = t('library.selectedCount', { count })
+  launchSelectedBtn.innerHTML = `${icon('play', 14)}<span>${t('library.launchSelected')}</span>`
+}
+
+function refreshLiveButtons() {
+  liveFitBtn.innerHTML = `${icon('fit', 14)}<span>${t('live.fit')}</span>`
+  liveFitBtn.title = t('live.fitHint')
+  liveFitBtn.setAttribute('aria-label', t('live.fitHint'))
+  liveStopAllBtn.innerHTML = `${icon('stop', 13)}<span>${t('live.stopAll')}</span>`
+}
+
+/* ---------------------------- lancer / arrêter --------------------------- */
+
+/**
+ * Démarre une liste de flux puis ouvre la vue Live avec ajustement automatique.
+ * Les flux non détectés sont ignorés (lecture bloquée, comme le bouton seule).
+ */
+function startStreams(ids) {
+  let started = false
+
+  for (const id of ids) {
+    if (state.running.has(id)) continue
+
+    const stream = state.streams.find((item) => item.id === id)
+    if (!stream || getAvailability(stream.url) !== 'online') continue
+
     // La présence est inconnue pendant la lecture : aucune sonde, et le
     // résultat d'une sonde antérieure ne doit pas resservir au prochain arrêt.
     state.running.add(id)
-    tile.player.activate()
-    tile.stopAvailabilityLoop()
-    invalidateProbeCache(tile.stream.url)
-    tile.refreshRunning()
+    state.selected.delete(id)
+    stopProbeLoop(id)
+    invalidateProbeCache(stream.url)
+    started = true
   }
+
+  if (!started) return
+
+  setView('live')
+  renderLive()
+  renderLibrary()
+  autoFitLiveGrid()
 }
+
+function stopRunning(id) {
+  if (!state.running.delete(id)) return
+
+  renderLive()
+  renderLibrary()
+  refreshProbeLoops()
+}
+
+function stopAllRunning() {
+  if (state.running.size === 0) return
+
+  state.running.clear()
+  renderLive()
+  renderLibrary()
+  refreshProbeLoops()
+}
+
+liveFitBtn.addEventListener('click', () => autoFitLiveGrid())
+liveStopAllBtn.addEventListener('click', () => stopAllRunning())
+launchSelectedBtn.addEventListener('click', () => startStreams([...state.selected]))
 
 function reorderStream(targetId) {
   if (!draggedId || draggedId === targetId) return
@@ -2038,12 +2309,14 @@ function reorderStream(targetId) {
   state.streams.splice(to, 0, moved)
 
   writeJson(STORAGE_KEYS.streams, state.streams)
-  renderGrid()
+  renderLibrary()
+  renderLive()
 }
 
 function deleteStream(id) {
   state.streams = state.streams.filter((stream) => stream.id !== id)
   state.running.delete(id)
+  state.selected.delete(id)
   delete state.tileSizes[id]
   delete state.audioMap[id]
   delete state.aspectRatios[id]
@@ -2052,7 +2325,8 @@ function deleteStream(id) {
   writeJson(STORAGE_KEYS.tileSizes, state.tileSizes)
   writeJson(STORAGE_KEYS.audio, state.audioMap)
 
-  renderGrid()
+  renderLibrary()
+  renderLive()
 }
 
 /* ------------------------------ dialogues -------------------------------- */
@@ -2153,13 +2427,16 @@ document.getElementById('stream-form').addEventListener('submit', (event) => {
           tile.refreshSize()
           tile.restartPlayer()
         }
+        // Une nouvelle URL mérite une nouvelle sonde sans attendre la cadence.
+        if (probeLoops.has(editingId)) startProbeLoop(stream)
       }
     }
   }
 
   writeJson(STORAGE_KEYS.streams, state.streams)
   closeTopDialog()
-  renderGrid()
+  renderLibrary()
+  renderLive()
 })
 
 /* ------------------------------ paramètres ------------------------------- */
@@ -2266,7 +2543,7 @@ importInput.addEventListener('change', () => {
     }
 
     writeJson(STORAGE_KEYS.streams, state.streams)
-    renderGrid()
+    renderLibrary()
 
     let message = t('settings.notice.imported', { count: added })
     const skipped = imported.length - added
@@ -2332,9 +2609,16 @@ function applyLanguage() {
   langFrBtn.classList.toggle('language-active', language === 'FR')
   langEnBtn.classList.toggle('language-active', language === 'EN')
 
-  countEl.textContent = t('workspace.count', { count: state.streams.length })
-
+  for (const row of rows.values()) {
+    row.refreshLabels()
+    row.refreshState()
+  }
   for (const tile of tiles.values()) tile.refreshLabels()
+
+  refreshSelectionBar()
+  refreshLiveButtons()
+  refreshLiveChrome()
+  libraryCountEl.textContent = t('library.count', { count: state.streams.length })
 
   // Libellés des boutons du formulaire ouvert.
   if (!formBackdrop.hidden) {
@@ -2361,14 +2645,22 @@ langEnBtn.addEventListener('click', () => setLanguage('EN'))
 
 /* -------------------------- en-tête / espace vide ------------------------ */
 
-document.getElementById('add-stream').addEventListener('click', () => openStreamForm(null))
+document.getElementById('add-stream').addEventListener('click', () => {
+  // Le formulaire d'ajout vit en bibliothèque : depuis le Live, on y bascule.
+  setView('library')
+  openStreamForm(null)
+})
 document.getElementById('empty-add').addEventListener('click', () => openStreamForm(null))
 
 /* ------------------------------ démarrage -------------------------------- */
 
+// Une disponibilité nouvelle ne concerne que les lignes de la bibliothèque :
+// les vignettes Live suivent leur propre état de connexion.
 subscribeAvailability(() => {
-  for (const tile of tiles.values()) tile.refreshAvailability()
+  for (const row of rows.values()) row.refreshState()
 })
 
-renderGrid()
+renderLibrary()
+renderLive()
 applyLanguage()
+setView(state.view)

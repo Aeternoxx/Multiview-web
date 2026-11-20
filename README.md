@@ -10,6 +10,12 @@ Aucune dépendance, aucun build : trois fichiers statiques (`index.html`,
 
 ## Ce qui est conservé depuis l'application desktop
 
+- **Deux vues** — une **Bibliothèque** (liste simple des flux sans vidéo : sélection
+  multiple et lancement groupé, ajout, édition, suppression, sondes de
+  disponibilité) et une vue **Live** (vignettes en cours de lecture : plein écran,
+  statistiques, audio, redimensionnement manuel et bouton **Ajuster** qui adapte la
+  grille à la fenêtre selon le nombre de flux). La Bibliothèque est la page par
+  défaut à l'ouverture.
 - **Flux multiples** — grille de tuiles vidéo, réordonnables par glisser-déposer.
 - **Client WHEP faible latence** — jitter buffer vidéo minimal, remontée
   automatique de la cible seulement si la gigue réseau reste élevée,

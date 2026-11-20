@@ -62,11 +62,35 @@
         </div>
       </header>
 
-      <section class="workspace">
+      <nav class="view-tabs" role="tablist">
+        <button
+          id="tab-library"
+          class="view-tab active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          data-i18n="tabs.library"
+        ></button>
+        <button
+          id="tab-live"
+          class="view-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-i18n="tabs.live"
+        ></button>
+      </nav>
+
+      <section id="library-view" class="workspace">
         <div class="section-heading">
           <div>
-            <h2 data-i18n="workspace.title"></h2>
-            <p id="stream-count"></p>
+            <h2 data-i18n="library.title"></h2>
+            <p id="library-count"></p>
+          </div>
+
+          <div id="selection-bar" class="selection-bar" hidden>
+            <span id="selection-count"></span>
+            <button id="launch-selected" class="primary-button" type="button"></button>
           </div>
         </div>
 
@@ -96,7 +120,46 @@
           <button id="empty-add" class="primary-button" type="button" data-i18n="empty.action"></button>
         </div>
 
-        <div id="stream-grid" class="stream-grid"></div>
+        <div id="library-list" class="library-list" hidden></div>
+      </section>
+
+      <section id="live-view" class="workspace" hidden>
+        <div class="section-heading">
+          <div>
+            <h2 data-i18n="live.title"></h2>
+            <p id="live-count"></p>
+          </div>
+
+          <div class="live-toolbar">
+            <button id="live-fit" class="secondary-button" type="button"></button>
+            <button id="live-stop-all" class="secondary-button danger" type="button" hidden></button>
+          </div>
+        </div>
+
+        <div id="live-empty" class="empty-state" hidden>
+          <div class="empty-icon">
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              width="26"
+              height="26"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M8 5.2 18.6 12 8 18.8Z" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
+          <h2 data-i18n="live.empty.title"></h2>
+          <p data-i18n="live.empty.body"></p>
+          <button id="live-open-library" class="primary-button" type="button" data-i18n="live.empty.action"></button>
+        </div>
+
+        <div id="stream-grid" class="stream-grid" hidden></div>
       </section>
 
       <footer class="footer">
