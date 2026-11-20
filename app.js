@@ -2097,17 +2097,11 @@ document.getElementById('live-open-library').addEventListener('click', () => set
 const DEFAULT_ASPECT_RATIO = 16 / 9
 
 /**
- * Taille de tuile visée par l'ajout automatique : des vignettes contenues,
- * regroupées en plusieurs colonnes plutôt qu'une seule colonne géante.
- */
-const FIT_TARGET_TILE_WIDTH = 640
-
-/**
  * Redimensionne les vignettes en cours de lecture pour remplir la fenêtre :
- * le nombre de colonnes remplit la largeur avec des tuiles proches de la
- * taille visée (jamais au-delà, jamais sous les minimales), et la hauteur de
- * vignette suit le ratio vidéo moyen. Les tailles obtenues écrasent les
- * tailles manuelles ; la poignée reprend la main jusqu'au prochain ajustement.
+ * le nombre de colonnes est celui qui maximise la surface utile de chaque
+ * vignette selon le nombre de flux et le ratio vidéo moyen. Les tailles
+ * obtenues écrasent les tailles manuelles ; la poignée reprend la main
+ * jusqu'au prochain ajustement.
  */
 function autoFitLiveGrid() {
   const ids = state.streams
@@ -2135,29 +2129,30 @@ function autoFitLiveGrid() {
   for (const id of ids) ratioSum += state.aspectRatios[id] ?? DEFAULT_ASPECT_RATIO
   const avgRatio = ratioSum / count
 
-  // Nombre de colonnes : autant de tuiles « taille visée » que la largeur le
-  // permet, puis on ajoute des colonnes tant que les tuiles restent décentes.
-  let cols = Math.max(
-    1,
-    Math.min(count, Math.floor((gridWidth + columnGap) / (FIT_TARGET_TILE_WIDTH + columnGap)))
-  )
-  while (cols < count) {
-    const nextCellW = (gridWidth - cols * columnGap) / (cols + 1)
-    if (nextCellW < MIN_TILE_WIDTH || nextCellW < FIT_TARGET_TILE_WIDTH * 0.75) break
-    cols += 1
+  let best = null
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols)
+    const cellW = (gridWidth - (cols - 1) * columnGap) / cols
+    const cellH = (availHeight - (rows - 1) * rowGap) / rows
+    if (cellW < MIN_TILE_WIDTH || cellH < MIN_TILE_HEIGHT) continue
+
+    const width = Math.min(cellW, cellH * avgRatio)
+    const area = width * (width / avgRatio)
+    if (!best || area > best.area) best = { width, area }
   }
 
-  const rows = Math.ceil(count / cols)
-  const cellW = (gridWidth - (cols - 1) * columnGap) / cols
-  const cellH = (availHeight - (rows - 1) * rowGap) / rows
-
-  const width = Math.max(MIN_TILE_WIDTH, Math.min(cellW, FIT_TARGET_TILE_WIDTH, cellH * avgRatio))
-  const height = Math.max(MIN_TILE_HEIGHT, width / avgRatio)
+  if (!best) {
+    // Les tailles minimales ne tiennent pas toutes : une colonne, défilement.
+    best = { width: Math.min(Math.max(gridWidth, MIN_TILE_WIDTH), availHeight * avgRatio) }
+  }
 
   // floor : arrondir à l'entier supérieur ferait dépasser la largeur d'une
-  // colonne et forcerait un retour à la ligne (une tuile par rang).
+  // colonne et forcerait un retour à la ligne (une tuile de moins par rang).
+  const width = Math.max(MIN_TILE_WIDTH, Math.floor(best.width))
+  const height = Math.max(MIN_TILE_HEIGHT, Math.floor(width / avgRatio))
+
   for (const id of ids) {
-    state.tileSizes[id] = { width: Math.floor(width), height: Math.floor(height) }
+    state.tileSizes[id] = { width, height }
     const tile = tiles.get(id)
     if (tile) tile.refreshSize()
   }
