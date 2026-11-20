@@ -2368,9 +2368,12 @@ function refreshLiveChrome() {
 }
 
 function refreshSelectionBar() {
+  // La barre de lancement reste affichée tant qu'il y a des flux : l'espace
+  // est réservé et la liste ne bouge jamais quand une sélection change.
   const count = state.selected.size
-  selectionBarEl.hidden = count === 0
+  selectionBarEl.hidden = state.streams.length === 0
   selectionCountEl.textContent = t('library.selectedCount', { count })
+  launchSelectedBtn.disabled = count === 0
   launchSelectedBtn.innerHTML = `${icon('play', 14)}<span>${t('library.launchSelected')}</span>`
 }
 

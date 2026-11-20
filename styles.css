@@ -135,6 +135,11 @@ a:focus-visible {
   background: #3a2028;
 }
 
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.45;
+}
+
 .icon-button {
   display: grid;
   place-items: center;
@@ -368,8 +373,9 @@ a:focus-visible {
   gap: 8px;
 }
 
-/* Launch row shown between the heading and the list: the heading buttons
-   never move when a selection appears or goes away. */
+/* Launch row shown between the heading and the list: the row is permanent
+   while streams exist (launch buttons disabled when nothing is selected),
+   so the heading buttons and the list never move. */
 .selection-bar {
   display: flex;
   align-items: center;
